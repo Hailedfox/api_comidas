@@ -19,7 +19,7 @@ class UsuarioController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|max:255',
@@ -33,26 +33,21 @@ class UsuarioController extends Controller
             $rutaFoto = $request->file('foto')->store('usuarios', 'public');
         }
 
-        // REPARACIÓN: Si el checkbox no se marca, mandamos 1 por defecto (Activo)
-        $activo = $request->has('activo') ? $request->activo : 1;
+        // Forzamos a entero 1 o 0 para que la DB no se queje
+        $activo = $request->merge(['activo' => $request->has('activo') ? 1 : 0]);
 
         $usuario = Usuario::create([
             'name' => $request->name,
             'email' => $request->email,
             'telefono' => $request->telefono,
             'rol' => $request->rol,
-            'activo' => $activo, // Usamos la variable validada
+            'activo' => $request->activo, 
             'password' => Hash::make($request->password),
             'foto' => $rutaFoto
         ]);
 
-        return response()->json([
-            "status" => true,
-            "mensaje" => "Usuario creado",
-            "data" => $usuario
-        ]);
+        return response()->json(["status" => true, "mensaje" => "Usuario creado", "data" => $usuario]);
     }
-
     public function show($id)
     {
         $usuario = Usuario::find($id);
@@ -71,42 +66,32 @@ class UsuarioController extends Controller
     public function update(Request $request, $id)
     {
         $usuario = Usuario::find($id);
+        if (!$usuario) return response()->json(["status" => false, "mensaje" => "No existe"]);
 
-        if (!$usuario) {
-            return response()->json([
-                "status" => false,
-                "mensaje" => "Usuario no encontrado"
-            ]);
-        }
+        // QUITAMOS la validación UNIQUE estricta para que deje guardar si el email es el mismo
+        $request->validate([
+            'name' => 'required|max:255',
+            'email' => 'required|email|unique:users,email,'.$id,
+        ]);
 
         if ($request->hasFile('foto')) {
-            if ($usuario->foto) {
-                Storage::disk('public')->delete($usuario->foto);
-            }
+            if ($usuario->foto) Storage::disk('public')->delete($usuario->foto);
             $usuario->foto = $request->file('foto')->store('usuarios', 'public');
         }
 
-        // REPARACIÓN PARA UPDATE: Capturamos todos los datos
-        $datos = $request->all();
-        
-        // Si el checkbox de activo no viene en el update, lo forzamos a 0 (Inactivo)
-        // porque si estamos editando y desmarcamos, queremos que se guarde como desactivado.
-        $datos['activo'] = $request->has('activo') ? $request->activo : 0;
+        $usuario->name = $request->name;
+        $usuario->email = $request->email;
+        $usuario->telefono = $request->telefono;
+        $usuario->rol = $request->rol;
+        $usuario->activo = $request->has('activo') ? 1 : 0;
 
-        // Si mandaron password nuevo, lo encriptamos. Si no, lo quitamos para no borrar el viejo.
         if ($request->filled('password')) {
-            $datos['password'] = Hash::make($request->password);
-        } else {
-            unset($datos['password']);
+            $usuario->password = Hash::make($request->password);
         }
 
-        $usuario->update($datos);
+        $usuario->save(); // Usamos save() en lugar de update() para asegurar que los cambios se apliquen
 
-        return response()->json([
-            "status" => true,
-            "mensaje" => "Usuario actualizado",
-            "data" => $usuario
-        ]);
+        return response()->json(["status" => true, "mensaje" => "Usuario actualizado", "data" => $usuario]);
     }
 
     public function destroy($id)
