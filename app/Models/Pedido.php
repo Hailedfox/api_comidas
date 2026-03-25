@@ -1,25 +1,20 @@
 <?php
-
 namespace App\Models;
-
 use Illuminate\Database\Eloquent\Model;
 
 class Pedido extends Model
 {
     protected $table = 'pedidos';
-    protected $primaryKey = 'id_pedido';
-    public $timestamps = false; // Tu SQL usa current_timestamp en DB
+    // 'estado' puede ser: 'creado', 'cancelado', etc.
+    protected $fillable = ['id_cliente', 'total', 'estado']; 
 
-    protected $fillable = ['id_usuario', 'id_comercio', 'total_pagado', 'estado'];
-
-    // Relación 1 a Muchos: Un pedido tiene muchos detalles
-    public function detalles()
-    {
-        return $this->hasMany(DetallePedido::class, 'id_pedido', 'id_pedido');
+    // Relación: Un pedido pertenece a un cliente
+    public function cliente() {
+        return $this->belongsTo(Cliente::class, 'id_cliente');
     }
 
-    public function usuario()
-    {
-        return $this->belongsTo(Usuario::class, 'id_usuario', 'id');
+    // Relación 1 a Muchos: Un pedido tiene muchos detalles (productos)
+    public function detalles() {
+        return $this->hasMany(DetallePedido::class, 'id_pedido');
     }
 }

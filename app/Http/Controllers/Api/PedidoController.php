@@ -3,96 +3,125 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use App\Models\Pedido;
 use App\Models\DetallePedido;
-use Illuminate\Http\Request;
+use App\Models\Producto;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class PedidoController extends Controller
 {
-    // Ver historial de pedidos
+    // 1. Ver historial de pedidos de un cliente (GET)
     public function index()
     {
-        $pedidos = Pedido::with(['detalles.producto', 'usuario'])->get();
-        return response()->json($pedidos, 200);
+        $cliente = Auth::guard('api-clientes')->user();
+        
+        // Trae los pedidos del cliente, incluyendo los detalles y los datos de cada producto
+        $pedidos = Pedido::with('detalles.producto')
+                         ->where('id_cliente', $cliente->id)
+                         ->orderBy('created_at', 'desc')
+                         ->get();
+
+        return response()->json([
+            "status" => true,
+            "data" => $pedidos
+        ]);
     }
 
-    // Crear pedido con varios productos (Relación 1 a Muchos)
+    // 2. Crear pedido por cliente (POST)
     public function store(Request $request)
     {
-        // Iniciamos una transacción para asegurar que se guarde todo o nada
-        return DB::transaction(function () use ($request) {
-            // 1. Crear el encabezado del pedido
+        $cliente = Auth::guard('api-clientes')->user();
+
+        // Validamos que nos envíen un arreglo de productos con cantidad
+        $request->validate([
+            'productos' => 'required|array',
+            'productos.*.id_producto' => 'required|exists:productos,id_producto',
+            'productos.*.cantidad' => 'required|integer|min:1'
+        ]);
+
+        DB::beginTransaction(); // Protegemos la transacción
+        try {
+            $total = 0;
+
+            // Creamos el pedido inicial en $0
             $pedido = Pedido::create([
-                'id_usuario' => $request->id_usuario,
-                'id_comercio' => $request->id_comercio,
-                'total_pagado' => $request->total_pagado,
-                'estado' => 'pendiente'
+                'id_cliente' => $cliente->id,
+                'total' => 0,
+                'estado' => 'creado'
             ]);
 
-            // 2. Crear los detalles (Varios productos)
+            // Guardamos cada producto en detalles_pedidos y calculamos el total
             foreach ($request->productos as $item) {
+                $producto = Producto::where('id_producto', $item['id_producto'])->first();
+                $subtotal = $producto->precio_original * $item['cantidad'];
+                $total += $subtotal;
+
                 DetallePedido::create([
-                    'id_pedido' => $pedido->id_pedido,
+                    'id_pedido' => $pedido->id,
                     'id_producto' => $item['id_producto'],
                     'cantidad' => $item['cantidad'],
-                    'precio_unitario' => $item['precio_unitario']
+                    'precio_unitario' => $producto->precio_original
                 ]);
             }
 
-            return response()->json(['message' => 'Pedido creado con éxito', 'pedido' => $pedido->load('detalles')], 201);
-        });
+            // Actualizamos el total final del pedido
+            $pedido->total = $total;
+            $pedido->save();
+
+            DB::commit();
+
+            return response()->json([
+                "status" => true,
+                "mensaje" => "Pedido creado exitosamente",
+                "data" => $pedido->load('detalles') // Devuelve el pedido con sus productos
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                "status" => false,
+                "mensaje" => "Error al crear el pedido",
+                "error" => $e->getMessage()
+            ], 500);
+        }
     }
 
-    // Ver detalle de un pedido específico
+    // 3. Ver detalle de pedido de un cliente (GET)
     public function show($id)
     {
-        $pedido = Pedido::with(['detalles.producto'])->find($id);
-        if (!$pedido) return response()->json(['message' => 'Pedido no encontrado'], 404);
-        return response()->json($pedido, 200);
+        $cliente = Auth::guard('api-clientes')->user();
+        
+        // Busca el pedido, pero SOLO si pertenece al cliente autenticado
+        $pedido = Pedido::with('detalles.producto')
+                        ->where('id_cliente', $cliente->id)
+                        ->find($id);
+
+        if (!$pedido) {
+            return response()->json(["status" => false, "mensaje" => "Pedido no encontrado o acceso denegado"], 404);
+        }
+
+        return response()->json(["status" => true, "data" => $pedido]);
     }
 
-    // --- FUNCIÓN AGREGADA PARA EL MÉTODO PUT ---
-    public function update(Request $request, $id)
-    {
-        return DB::transaction(function () use ($request, $id) {
-            $pedido = Pedido::find($id);
-
-            if (!$pedido) {
-                return response()->json(['message' => 'Pedido no encontrado'], 404);
-            }
-
-            // Actualizar datos generales
-            $pedido->update([
-                'id_usuario' => $request->id_usuario,
-                'id_comercio' => $request->id_comercio,
-                'total_pagado' => $request->total_pagado,
-                'estado' => $request->estado ?? $pedido->estado
-            ]);
-
-            // Actualizar productos: Borramos los anteriores y registramos los nuevos
-            DetallePedido::where('id_pedido', $id)->delete();
-
-            foreach ($request->productos as $item) {
-                DetallePedido::create([
-                    'id_pedido' => $pedido->id_pedido,
-                    'id_producto' => $item['id_producto'],
-                    'cantidad' => $item['cantidad'],
-                    'precio_unitario' => $item['precio_unitario']
-                ]);
-            }
-
-            return response()->json(['message' => 'Pedido actualizado con éxito', 'pedido' => $pedido->load('detalles')], 200);
-        });
-    }
-
-    // Cancelar pedido
+    // 4. Cancelar pedido por cliente (DELETE)
     public function destroy($id)
     {
-        $pedido = Pedido::find($id);
-        if (!$pedido) return response()->json(['message' => 'Pedido no encontrado'], 404);
-        
-        $pedido->update(['estado' => 'cancelado']);
-        return response()->json(['message' => 'Pedido cancelado'], 200);
+        $cliente = Auth::guard('api-clientes')->user();
+        $pedido = Pedido::where('id_cliente', $cliente->id)->find($id);
+
+        if (!$pedido) {
+            return response()->json(["status" => false, "mensaje" => "Pedido no encontrado"], 404);
+        }
+
+        // Para mantener historial, en lugar de borrarlo físico, actualizamos su estado:
+        $pedido->estado = 'cancelado';
+        $pedido->save();
+
+        return response()->json([
+            "status" => true,
+            "mensaje" => "El pedido ha sido cancelado exitosamente"
+        ]);
     }
 }

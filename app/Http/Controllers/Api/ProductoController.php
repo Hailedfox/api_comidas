@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductoController extends Controller
 {
-
+    // 1. LISTAR TODOS LOS PRODUCTOS
     public function index()
     {
         $productos = Producto::with('comercio')->get();
@@ -20,6 +20,7 @@ class ProductoController extends Controller
         ]);
     }
 
+    // 2. CREAR UN PRODUCTO NUEVO
     public function store(Request $request)
     {
         $request->validate([
@@ -60,6 +61,7 @@ class ProductoController extends Controller
         ],201);
     }
 
+    // 3. VER UN PRODUCTO ESPECÍFICO
     public function show($id)
     {
         $producto = Producto::find($id);
@@ -77,6 +79,7 @@ class ProductoController extends Controller
         ]);
     }
 
+    // 4. ACTUALIZAR UN PRODUCTO (CORREGIDO)
     public function update(Request $request, $id)
     {
         $producto = Producto::find($id);
@@ -90,19 +93,24 @@ class ProductoController extends Controller
 
         $request->validate([
             'nombre' => 'required|max:150',
-            'precio_original' => 'required|numeric'
+            'precio_original' => 'required|numeric',
+            'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
         ]);
 
-        if ($request->hasFile('foto')) {
+        // Separamos los datos de texto de la foto
+        $datos = $request->except('foto');
 
+        // Si mandaron una foto nueva, borramos la vieja y guardamos la nueva
+        if ($request->hasFile('foto')) {
             if($producto->foto){
                 Storage::disk('public')->delete($producto->foto);
             }
-
-            $producto->foto = $request->file('foto')->store('productos','public');
+            // Agregamos la ruta de la foto nueva al arreglo de datos que vamos a actualizar
+            $datos['foto'] = $request->file('foto')->store('productos','public');
         }
 
-        $producto->update($request->all());
+        // Actualizamos de forma segura usando el arreglo limpio
+        $producto->update($datos);
 
         return response()->json([
             "status"=>true,
@@ -111,6 +119,7 @@ class ProductoController extends Controller
         ]);
     }
 
+    // 5. ELIMINAR UN PRODUCTO
     public function destroy($id)
     {
         $producto = Producto::find($id);
@@ -122,6 +131,7 @@ class ProductoController extends Controller
             ],404);
         }
 
+        // Si tiene foto, la borramos del servidor
         if($producto->foto){
             Storage::disk('public')->delete($producto->foto);
         }
