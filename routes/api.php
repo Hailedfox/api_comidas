@@ -15,7 +15,7 @@ use App\Http\Controllers\Api\ClienteAuthController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ComercioController;
 use App\Http\Controllers\Api\UsuarioController;
-
+use App\Http\Controllers\Api\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,8 +30,16 @@ use App\Http\Controllers\Api\UsuarioController;
 // Autenticación Original / Admin
 Route::post('/login', [AuthController::class, 'login']);
 
-// RUTAS PROTEGIDAS
-Route::middleware('auth:sanctum')->group(function () {
+// Autenticación de Clientes (Passport)
+Route::post('/clientes/registro', [ClienteAuthController::class, 'register']);
+Route::post('/clientes/login', [ClienteAuthController::class, 'login']);
+
+
+// ==========================================
+// 2. RUTAS PROTEGIDAS (Requieren token de Passport de Cliente)
+// ==========================================
+
+Route::middleware('auth:api-clientes')->group(function () {
 
     // --- A. Gestión de Perfil de Cliente ---
     Route::get('/clientes/perfil', [ClienteAuthController::class, 'perfil']);
@@ -49,4 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('productos', ProductoController::class);
     Route::apiResource('comercios', ComercioController::class);
     Route::apiResource('usuarios', UsuarioController::class);
+    
+    // Logout original
+    Route::post('/logout', [AuthController::class, 'logout']); 
 });
