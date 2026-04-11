@@ -80,44 +80,33 @@ class ProductoController extends Controller
     }
 
     // 4. ACTUALIZAR UN PRODUCTO (CORREGIDO)
-    public function update(Request $request, $id)
-    {
-        $producto = Producto::find($id);
+  public function update(Request $request, $id)
+{
+    $request->validate([
+        'nombre' => 'required|string|max:150',
+        'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
+    ]);
 
-        if(!$producto){
-            return response()->json([
-                "status"=>false,
-                "mensaje"=>"Producto no encontrado"
-            ],404);
-        }
+    $data = $request->except(['foto', '_token', '_method']);
+    $data['activo'] = $request->has('activo') ? 1 : 0;
 
-        $request->validate([
-            'nombre' => 'required|max:150',
-            'precio_original' => 'required|numeric',
-            'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
-        ]);
+    $http = \Illuminate\Support\Facades\Http::withToken(session('api_token'))->asMultipart();
 
-        // Separamos los datos de texto de la foto
-        $datos = $request->except('foto');
-
-        // Si mandaron una foto nueva, borramos la vieja y guardamos la nueva
-        if ($request->hasFile('foto')) {
-            if($producto->foto){
-                Storage::disk('public')->delete($producto->foto);
-            }
-            // Agregamos la ruta de la foto nueva al arreglo de datos que vamos a actualizar
-            $datos['foto'] = $request->file('foto')->store('productos','public');
-        }
-
-        // Actualizamos de forma segura usando el arreglo limpio
-        $producto->update($datos);
-
-        return response()->json([
-            "status"=>true,
-            "mensaje"=>"Producto actualizado",
-            "data"=>$producto
-        ]);
+    if ($request->hasFile('foto')) {
+        $foto = $request->file('foto');
+        $http = $http->attach('foto', file_get_contents($foto->getPathname()), $foto->getClientOriginalName());
     }
+
+    // Usamos POST con _method=PUT porque multipart no soporta PUT nativamente
+    $data['_method'] = 'PUT'; 
+    $response = $http->post("http://127.0.0.1:8000/api/productos/{$id}", $data);
+
+    if ($response->successful()) {
+        return redirect()->route('productos.index')->with('success', 'Producto actualizado correctamente');
+    }
+
+    return back()->with('error', 'Error al actualizar: ' . $response->body());
+}
 
     // 5. ELIMINAR UN PRODUCTO
     public function destroy($id)
