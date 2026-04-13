@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\UsuarioController;
 // AGREGADO: Importamos PedidoController para que 'php artisan route:list' no truene
 use App\Http\Controllers\Api\PedidoController; 
 
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -31,6 +32,7 @@ Route::post('/clientes/login', [ClienteAuthController::class, 'login']);
 Route::apiResource('productos', ProductoController::class);
 Route::apiResource('comercios', ComercioController::class);
 Route::apiResource('usuarios', UsuarioController::class);
+
 
 
 // ==========================================

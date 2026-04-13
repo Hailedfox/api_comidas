@@ -13,7 +13,7 @@ class Producto extends Model
     protected $primaryKey = 'id_producto';
     public $timestamps = false;
 
-    protected $fillable = [
+   protected $fillable = [
         'id_comercio',
         'id_categoria',
         'nombre',
@@ -24,7 +24,8 @@ class Producto extends Model
         'fecha_caducidad',
         'hora_recogida_inicio',
         'hora_recogida_fin',
-        'activo'
+        'activo',
+        'foto' 
     ];
 
     protected $casts = [

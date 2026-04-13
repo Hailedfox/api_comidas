@@ -23,6 +23,10 @@ class ProductoController extends Controller
     // 2. CREAR UN PRODUCTO NUEVO
     public function store(Request $request)
     {
+        // AGREGA ESTA LÍNEA AQUÍ
+    \Log::info('Datos recibidos en API:', $request->all());
+    \Log::info('¿Tiene archivo?: ' . ($request->hasFile('foto') ? 'SÍ' : 'NO'));
+    
         $request->validate([
             'id_comercio' => 'required|exists:comercios,id_comercio',
             'nombre' => 'required|max:150',
